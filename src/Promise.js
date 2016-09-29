@@ -669,11 +669,18 @@ function globalError(err, promise) {
 export function addPromiseWrapper(PromiseClass) {
     var proto = PromiseClass.prototype;
     var origThen = proto.then;
+    function DummyPromiseConstructor(){};
     
+    // For Native async/await to work in chrome.
     wrappers.add({
         snapshot: () => proto.then,
         restore: value => {proto.then = value;},
         wrap: () => patchedThen
+    });
+    wrappers.add({
+        snapshot: () => proto.constructor,
+        restore: value => {proto.constructor = value;},
+        wrap: () => DummyPromiseConstructor
     });
 
     function patchedThen (onFulfilled, onRejected) {
@@ -713,7 +720,14 @@ export function addPromiseWrapper(PromiseClass) {
 }
 
 // Add the ability to wrap global Promise
-if (_global.Promise) addPromiseWrapper(_global.Promise);
+if (_global.Promise) {
+    addPromiseWrapper(_global.Promise);
+    wrappers.add({
+        snapshot: () => _global.Promise,
+        restore: value => {_global.Promise = value;},
+        wrap: () => Promise
+    });
+}
 try {
     // Add the ability to wrap native Promise in case global Promise was replaced (needed for async await to work properly)
     const NativePromise = eval (`(async ()=>await Promise.resolve())().constructor`);
